@@ -1,18 +1,18 @@
-using Quartz;
+namespace Quartz.Sample.Jobs;
 
-public class UpdateOddsTodayJob : IJob
+public class UpdateOddsEarlyJob : IJob
 {
-    private readonly ILogger<UpdateOddsTodayJob> _logger;
+    private readonly ILogger<UpdateOddsEarlyJob> _logger;
     private static readonly Random _random = new Random();
 
-    public UpdateOddsTodayJob(ILogger<UpdateOddsTodayJob> logger)
+    public UpdateOddsEarlyJob(ILogger<UpdateOddsEarlyJob> logger)
     {
         _logger = logger;
     }
 
     public async Task Execute(IJobExecutionContext context)
     {
-        _logger.LogInformation("Updating odds for today...");
+        _logger.LogInformation("Updating odds for early...");
 
         try
         {
@@ -28,11 +28,11 @@ public class UpdateOddsTodayJob : IJob
                 throw new Exception($"隨機模擬的執行失敗，執行時間為 {executionTime}ms");
             }
             
-            _logger.LogInformation("Successfully updated odds for today. Execution time: {ExecutionTime}ms", executionTime);
+            _logger.LogInformation("Successfully updated odds for early. Execution time: {ExecutionTime}ms", executionTime);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating odds for today");
+            _logger.LogError(ex, "Error updating odds for early");
             throw; // 重新拋出異常，使 Quartz 能夠捕獲到失敗狀態
         }
     }

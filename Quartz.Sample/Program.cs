@@ -1,5 +1,6 @@
 using NLog.Extensions.Logging;
 using Quartz;
+using Quartz.Sample.Jobs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,16 +18,26 @@ builder.Services.AddSingleton<JobExecutionHistoryListener>();
 
 builder.Services.AddQuartz(configurator =>
 {
-    var jobKey = new JobKey("UpdateOddsTodayJob");
-    configurator.AddJob<UpdateOddsTodayJob>(jobConfigurator => { jobConfigurator.WithIdentity(jobKey); });
+    var updateOddsTodayJobKey = new JobKey("UpdateOddsTodayJob");
+    configurator.AddJob<UpdateOddsTodayJob>(jobConfigurator => { jobConfigurator.WithIdentity(updateOddsTodayJobKey); });
     configurator.AddTrigger(triggerConfigurator =>
         // interval every 5 sec
         triggerConfigurator
-            .ForJob(jobKey)
+            .ForJob(updateOddsTodayJobKey)
             .WithIdentity("UpdateOddsTodayJobTrigger")
             .WithCronSchedule("0/5 * * * * ?")
     );
     
+    var updateOddsEarlyJobKey = new JobKey("UpdateOddsEarlyJob");
+    configurator.AddJob<UpdateOddsEarlyJob>(jobConfigurator => { jobConfigurator.WithIdentity(updateOddsEarlyJobKey); });
+    configurator.AddTrigger(triggerConfigurator =>
+        // interval every 5 sec
+        triggerConfigurator
+            .ForJob(updateOddsEarlyJobKey)
+            .WithIdentity("UpdateOddsEarlyJobTrigger")
+            .WithCronSchedule("0/5 * * * * ?")
+    );
+
     // 在 Quartz 中註冊我們的監聽器
     configurator.AddJobListener<JobExecutionHistoryListener>();
 });
@@ -50,44 +61,41 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 // 添加 API 端點以獲取 Job 資訊
-app.MapGet("/api/jobs", async (JobInfoService jobInfoService) =>
-{
-    return await jobInfoService.GetAllJobsInfoAsync();
-})
-.WithName("GetJobsInfo")
-.WithOpenApi();
+app.MapGet("/api/jobs", async (JobInfoService jobInfoService) => { return await jobInfoService.GetAllJobsInfoAsync(); })
+    .WithName("GetJobsInfo")
+    .WithOpenApi();
 
 // 新增 API 端點以獲取 Job 執行歷史
 app.MapGet("/api/jobs/history", (JobExecutionHistoryService historyService, string jobName = null, string jobGroup = null) =>
-{
-    try
     {
-        var history = historyService.GetExecutionHistory(jobName, jobGroup);
-        return Results.Ok(history);
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"讀取執行歷史失敗: {ex.Message}");
-    }
-})
-.WithName("GetJobExecutionHistory")
-.WithOpenApi();
+        try
+        {
+            var history = historyService.GetExecutionHistory(jobName, jobGroup);
+            return Results.Ok(history);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"讀取執行歷史失敗: {ex.Message}");
+        }
+    })
+    .WithName("GetJobExecutionHistory")
+    .WithOpenApi();
 
 // 新增 API 端點以清除 Job 執行歷史
 app.MapDelete("/api/jobs/history", (JobExecutionHistoryService historyService, string jobName = null, string jobGroup = null) =>
-{
-    try
     {
-        historyService.ClearHistory(jobName, jobGroup);
-        return Results.Ok(new { message = "歷史記錄已清除" });
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"清除執行歷史失敗: {ex.Message}");
-    }
-})
-.WithName("ClearJobExecutionHistory")
-.WithOpenApi();
+        try
+        {
+            historyService.ClearHistory(jobName, jobGroup);
+            return Results.Ok(new { message = "歷史記錄已清除" });
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"清除執行歷史失敗: {ex.Message}");
+        }
+    })
+    .WithName("ClearJobExecutionHistory")
+    .WithOpenApi();
 
 // 將根路徑重定向到儀表板頁面
 app.MapGet("/", () => Results.Redirect("/index.html"));
