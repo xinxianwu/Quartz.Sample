@@ -9,6 +9,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Logging.AddNLog();
+
+// 註冊 JobExecutionHistoryService 作為單例服務
+builder.Services.AddSingleton<JobExecutionHistoryService>();
+// 註冊 JobExecutionHistoryListener 作為單例服務
+builder.Services.AddSingleton<JobExecutionHistoryListener>();
+
 builder.Services.AddQuartz(configurator =>
 {
     var jobKey = new JobKey("UpdateOddsTodayJob");
@@ -20,6 +26,9 @@ builder.Services.AddQuartz(configurator =>
             .WithIdentity("UpdateOddsTodayJobTrigger")
             .WithCronSchedule("0/5 * * * * ?")
     );
+    
+    // 在 Quartz 中註冊我們的監聽器
+    configurator.AddJobListener<JobExecutionHistoryListener>();
 });
 builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 
@@ -46,6 +55,38 @@ app.MapGet("/api/jobs", async (JobInfoService jobInfoService) =>
     return await jobInfoService.GetAllJobsInfoAsync();
 })
 .WithName("GetJobsInfo")
+.WithOpenApi();
+
+// 新增 API 端點以獲取 Job 執行歷史
+app.MapGet("/api/jobs/history", (JobExecutionHistoryService historyService, string jobName = null, string jobGroup = null) =>
+{
+    try
+    {
+        var history = historyService.GetExecutionHistory(jobName, jobGroup);
+        return Results.Ok(history);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"讀取執行歷史失敗: {ex.Message}");
+    }
+})
+.WithName("GetJobExecutionHistory")
+.WithOpenApi();
+
+// 新增 API 端點以清除 Job 執行歷史
+app.MapDelete("/api/jobs/history", (JobExecutionHistoryService historyService, string jobName = null, string jobGroup = null) =>
+{
+    try
+    {
+        historyService.ClearHistory(jobName, jobGroup);
+        return Results.Ok(new { message = "歷史記錄已清除" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"清除執行歷史失敗: {ex.Message}");
+    }
+})
+.WithName("ClearJobExecutionHistory")
 .WithOpenApi();
 
 // 原有的 WeatherForecast 端點
