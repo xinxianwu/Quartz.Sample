@@ -6,6 +6,7 @@
     <title>Quartz Job 管理</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
         .chart-container {
             position: relative;
@@ -200,20 +201,44 @@
 
             const ctx = document.getElementById('executionTimeChart').getContext('2d');
             
-            const labels = history.map(record => new Date(record.fireTime).toLocaleString());
-            const durations = history.map(record => parseDuration(record.executionDuration));
-            
+            // 按照 Job 名稱分組數據
+            const jobGroups = history.reduce((groups, record) => {
+                const key = `${record.jobGroup}.${record.jobName}`;
+                if (!groups[key]) {
+                    groups[key] = [];
+                }
+                groups[key].push(record);
+                return groups;
+            }, {});
+
+            // 為每個 Job 創建一個數據集
+            const datasets = Object.entries(jobGroups).map(([jobKey, records], index) => {
+                // 使用不同的顏色
+                const colors = [
+                    'rgb(75, 192, 192)',   // 青色
+                    'rgb(255, 99, 132)',   // 紅色
+                    'rgb(255, 205, 86)',   // 黃色
+                    'rgb(54, 162, 235)',   // 藍色
+                    'rgb(153, 102, 255)',  // 紫色
+                    'rgb(255, 159, 64)'    // 橙色
+                ];
+                
+                return {
+                    label: jobKey,
+                    data: records.map(record => ({
+                        x: new Date(record.fireTime).getTime(),
+                        y: parseDuration(record.executionDuration)
+                    })),
+                    borderColor: colors[index % colors.length],
+                    tension: 0.1,
+                    fill: false
+                };
+            });
+
             executionTimeChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
-                    datasets: [{
-                        label: '執行時間 (秒)',
-                        data: durations,
-                        borderColor: 'rgb(75, 192, 192)',
-                        tension: 0.1,
-                        fill: false
-                    }]
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
@@ -227,9 +252,29 @@
                             }
                         },
                         x: {
+                            type: 'time',
+                            time: {
+                                unit: 'minute',
+                                displayFormats: {
+                                    minute: 'MM/dd HH:mm'
+                                }
+                            },
                             title: {
                                 display: true,
                                 text: '執行時間'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: (context) => {
+                                    return new Date(context[0].parsed.x).toLocaleString();
+                                }
                             }
                         }
                     }
