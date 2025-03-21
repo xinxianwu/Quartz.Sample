@@ -1,4 +1,4 @@
-using Quartz;
+namespace Quartz.Sample.JobHistory;
 
 public class JobExecutionHistoryListener : IJobListener
 {
@@ -30,7 +30,7 @@ public class JobExecutionHistoryListener : IJobListener
         var duration = context.JobRunTime;
         var wasSuccessful = jobException == null;
         
-        _historyService.RecordExecution(context, duration, wasSuccessful, jobException?.InnerException);
+        _historyService.RecordExecution(context, duration, wasSuccessful, jobException);
         return Task.CompletedTask;
     }
 }

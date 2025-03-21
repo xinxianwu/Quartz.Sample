@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
-using Quartz;
+
+namespace Quartz.Sample.JobHistory;
 
 public class JobExecutionHistoryService
 {
@@ -24,7 +25,7 @@ public class JobExecutionHistoryService
 
         _executionHistory.AddOrUpdate(
             jobKey,
-            _ => new List<JobExecutionRecord> { record },
+            _ => [record],
             (_, list) => {
                 list.Add(record);
                 // 保持列表不超過最大容量

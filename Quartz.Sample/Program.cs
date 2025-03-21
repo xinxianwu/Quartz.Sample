@@ -1,5 +1,7 @@
 using NLog.Extensions.Logging;
 using Quartz;
+using Quartz.Sample;
+using Quartz.Sample.JobHistory;
 using Quartz.Sample.Jobs;
 
 var builder = WebApplication.CreateBuilder(args);

@@ -1,5 +1,6 @@
-using Quartz;
 using Quartz.Impl.Matchers;
+
+namespace Quartz.Sample.JobHistory;
 
 public class JobInfoService
 {
