@@ -1,0 +1,138 @@
+
+<!DOCTYPE html>
+<html lang="zh-tw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quartz Job 監控儀表板</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+        .refresh-btn {
+            margin-bottom: 15px;
+        }
+        .timestamp {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Quartz Job 監控儀表板</h1>
+        
+        <button id="refreshButton" class="btn btn-primary refresh-btn">重新整理</button>
+        <div id="lastUpdate" class="timestamp">上次更新: </div>
+        
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Job 名稱</th>
+                        <th>群組</th>
+                        <th>觸發器名稱</th>
+                        <th>執行頻率</th>
+                        <th>觸發器狀態</th>
+                        <th>上次執行時間</th>
+                        <th>下次執行時間</th>
+                    </tr>
+                </thead>
+                <tbody id="jobsTableBody">
+                    <!-- 資料將由 JavaScript 動態填入 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadJobsInfo();
+            
+            document.getElementById('refreshButton').addEventListener('click', loadJobsInfo);
+        });
+
+        function loadJobsInfo() {
+            fetch('/api/jobs')
+                .then(response => response.json())
+                .then(data => {
+                    updateJobsTable(data);
+                    updateLastRefreshTime();
+                })
+                .catch(error => console.error('讀取 Job 資訊出錯:', error));
+        }
+
+        function updateJobsTable(jobs) {
+            const tableBody = document.getElementById('jobsTableBody');
+            tableBody.innerHTML = '';
+            
+            if (jobs.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = '<td colspan="7" class="text-center">沒有 Job 資訊可顯示</td>';
+                tableBody.appendChild(row);
+                return;
+            }
+            
+            jobs.forEach(job => {
+                const row = document.createElement('tr');
+                
+                // 標記不同狀態的行
+                if (job.triggerState === 'Blocked') {
+                    row.classList.add('table-danger');
+                } else if (job.triggerState === 'Paused') {
+                    row.classList.add('table-warning');
+                }
+                
+                row.innerHTML = `
+                    <td>${escapeHtml(job.jobName)}</td>
+                    <td>${escapeHtml(job.jobGroup)}</td>
+                    <td>${escapeHtml(job.triggerName)}</td>
+                    <td>${escapeHtml(job.schedule || '未指定')}</td>
+                    <td>${getTriggerStateLabel(job.triggerState)}</td>
+                    <td>${formatDateTime(job.previousFireTime)}</td>
+                    <td>${formatDateTime(job.nextFireTime)}</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+
+        function getTriggerStateLabel(state) {
+            const stateLabels = {
+                'Normal': '<span class="badge bg-success">正常</span>',
+                'Paused': '<span class="badge bg-warning">已暫停</span>',
+                'Complete': '<span class="badge bg-info">已完成</span>',
+                'Error': '<span class="badge bg-danger">錯誤</span>',
+                'Blocked': '<span class="badge bg-danger">被阻塞</span>'
+            };
+            
+            return stateLabels[state] || `<span class="badge bg-secondary">${state}</span>`;
+        }
+
+        function formatDateTime(dateTimeStr) {
+            if (!dateTimeStr) return '尚未執行';
+            
+            const date = new Date(dateTimeStr);
+            return date.toLocaleString('zh-TW');
+        }
+
+        function updateLastRefreshTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                `上次更新: ${now.toLocaleString('zh-TW')}`;
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+         }
+    </script>
+</body>
+</html>

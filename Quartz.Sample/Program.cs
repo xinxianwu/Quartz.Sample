@@ -23,6 +23,9 @@ builder.Services.AddQuartz(configurator =>
 });
 builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 
+// 添加 JobInfoService 以提供 Job 資訊
+builder.Services.AddTransient<JobInfoService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -34,6 +37,18 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// 啟用靜態文件服務，提供 HTML 界面
+app.UseStaticFiles();
+
+// 添加 API 端點以獲取 Job 資訊
+app.MapGet("/api/jobs", async (JobInfoService jobInfoService) =>
+{
+    return await jobInfoService.GetAllJobsInfoAsync();
+})
+.WithName("GetJobsInfo")
+.WithOpenApi();
+
+// 原有的 WeatherForecast 端點
 var summaries = new[]
 {
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
@@ -53,6 +68,9 @@ app.MapGet("/weatherforecast", () =>
     })
     .WithName("GetWeatherForecast")
     .WithOpenApi();
+
+// 將根路徑重定向到儀表板頁面
+app.MapGet("/", () => Results.Redirect("/index.html"));
 
 app.Run();
 
