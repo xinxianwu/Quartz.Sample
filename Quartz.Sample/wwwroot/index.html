@@ -1,138 +1,295 @@
-
 <!DOCTYPE html>
-<html lang="zh-tw">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quartz Job 監控儀表板</title>
+    <title>Quartz Job 管理</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            padding-top: 20px;
-            padding-bottom: 20px;
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+            margin: 20px 0;
         }
-        .refresh-btn {
-            margin-bottom: 15px;
+        .history-table {
+            margin-top: 20px;
         }
-        .timestamp {
-            font-size: 0.9rem;
-            color: #6c757d;
-            margin-bottom: 15px;
+        .success {
+            color: green;
+        }
+        .failure {
+            color: red;
+        }
+        .nav-tabs {
+            margin-bottom: 20px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="mb-4">Quartz Job 監控儀表板</h1>
-        
-        <button id="refreshButton" class="btn btn-primary refresh-btn">重新整理</button>
-        <div id="lastUpdate" class="timestamp">上次更新: </div>
-        
-        <div class="table-responsive">
-            <table class="table table-striped table-bordered">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Job 名稱</th>
-                        <th>群組</th>
-                        <th>觸發器名稱</th>
-                        <th>執行頻率</th>
-                        <th>觸發器狀態</th>
-                        <th>上次執行時間</th>
-                        <th>下次執行時間</th>
-                    </tr>
-                </thead>
-                <tbody id="jobsTableBody">
-                    <!-- 資料將由 JavaScript 動態填入 -->
-                </tbody>
-            </table>
+    <div class="container mt-4">
+        <h1>Quartz Job 管理</h1>
+
+        <!-- 頁簽導航 -->
+        <ul class="nav nav-tabs" id="jobTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="jobs-tab" data-bs-toggle="tab" data-bs-target="#jobs" type="button" role="tab">
+                    Job 列表
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab">
+                    執行歷史
+                </button>
+            </li>
+        </ul>
+
+        <!-- 頁簽內容 -->
+        <div class="tab-content" id="jobTabsContent">
+            <!-- Job 列表頁簽 -->
+            <div class="tab-pane fade show active" id="jobs" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Job 名稱</th>
+                                <th>Job 群組</th>
+                                <th>Trigger 名稱</th>
+                                <th>Trigger 群組</th>
+                                <th>Cron 表達式</th>
+                                <th>下次執行時間</th>
+                                <th>上次執行時間</th>
+                                <th>狀態</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jobsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 執行歷史頁簽 -->
+            <div class="tab-pane fade" id="history" role="tabpanel">
+                <div class="row mb-4">
+                    <div class="col">
+                        <div class="input-group">
+                            <input type="text" id="jobName" class="form-control" placeholder="Job 名稱">
+                            <input type="text" id="jobGroup" class="form-control" placeholder="Job 群組">
+                            <button class="btn btn-primary" onclick="loadHistory()">查詢</button>
+                            <button class="btn btn-danger" onclick="clearHistory()">清除歷史</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="chart-container">
+                            <canvas id="executionTimeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="table-responsive history-table">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Job 名稱</th>
+                                        <th>Job 群組</th>
+                                        <th>觸發器名稱</th>
+                                        <th>觸發器群組</th>
+                                        <th>執行時間</th>
+                                        <th>執行時長</th>
+                                        <th>狀態</th>
+                                        <th>錯誤訊息</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            loadJobsInfo();
-            
-            document.getElementById('refreshButton').addEventListener('click', loadJobsInfo);
-        });
-
-        function loadJobsInfo() {
-            fetch('/api/jobs')
-                .then(response => response.json())
-                .then(data => {
-                    updateJobsTable(data);
-                    updateLastRefreshTime();
-                })
-                .catch(error => console.error('讀取 Job 資訊出錯:', error));
+        // 原有的 Job 列表相關代碼
+        async function loadJobs() {
+            try {
+                const response = await fetch('/api/jobs');
+                const jobs = await response.json();
+                updateJobsTable(jobs);
+            } catch (error) {
+                console.error('載入 Jobs 失敗:', error);
+            }
         }
 
         function updateJobsTable(jobs) {
-            const tableBody = document.getElementById('jobsTableBody');
-            tableBody.innerHTML = '';
-            
-            if (jobs.length === 0) {
-                const row = document.createElement('tr');
-                row.innerHTML = '<td colspan="7" class="text-center">沒有 Job 資訊可顯示</td>';
-                tableBody.appendChild(row);
-                return;
-            }
+            const tbody = document.getElementById('jobsTableBody');
+            tbody.innerHTML = '';
             
             jobs.forEach(job => {
                 const row = document.createElement('tr');
-                
-                // 標記不同狀態的行
-                if (job.triggerState === 'Blocked') {
-                    row.classList.add('table-danger');
-                } else if (job.triggerState === 'Paused') {
-                    row.classList.add('table-warning');
-                }
-                
                 row.innerHTML = `
-                    <td>${escapeHtml(job.jobName)}</td>
-                    <td>${escapeHtml(job.jobGroup)}</td>
-                    <td>${escapeHtml(job.triggerName)}</td>
-                    <td>${escapeHtml(job.schedule || '未指定')}</td>
-                    <td>${getTriggerStateLabel(job.triggerState)}</td>
-                    <td>${formatDateTime(job.previousFireTime)}</td>
-                    <td>${formatDateTime(job.nextFireTime)}</td>
+                    <td>${job.jobName}</td>
+                    <td>${job.jobGroup}</td>
+                    <td>${job.triggerName}</td>
+                    <td>${job.triggerGroup}</td>
+                    <td>${job.cronExpression}</td>
+                    <td>${new Date(job.nextFireTime).toLocaleString()}</td>
+                    <td>${job.previousFireTime ? new Date(job.previousFireTime).toLocaleString() : '-'}</td>
+                    <td>${job.state}</td>
                 `;
-                
-                tableBody.appendChild(row);
+                tbody.appendChild(row);
             });
         }
 
-        function getTriggerStateLabel(state) {
-            const stateLabels = {
-                'Normal': '<span class="badge bg-success">正常</span>',
-                'Paused': '<span class="badge bg-warning">已暫停</span>',
-                'Complete': '<span class="badge bg-info">已完成</span>',
-                'Error': '<span class="badge bg-danger">錯誤</span>',
-                'Blocked': '<span class="badge bg-danger">被阻塞</span>'
-            };
+        // 執行歷史相關代碼
+        let executionTimeChart = null;
+
+        async function loadHistory() {
+            const jobName = document.getElementById('jobName').value;
+            const jobGroup = document.getElementById('jobGroup').value;
             
-            return stateLabels[state] || `<span class="badge bg-secondary">${state}</span>`;
+            try {
+                const response = await fetch(`/api/jobs/history?jobName=${encodeURIComponent(jobName)}&jobGroup=${encodeURIComponent(jobGroup)}`);
+                const history = await response.json();
+                
+                updateTable(history);
+                updateChart(history);
+            } catch (error) {
+                console.error('載入歷史記錄失敗:', error);
+                alert('載入歷史記錄失敗');
+            }
         }
 
-        function formatDateTime(dateTimeStr) {
-            if (!dateTimeStr) return '尚未執行';
+        function updateTable(history) {
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '';
             
-            const date = new Date(dateTimeStr);
-            return date.toLocaleString('zh-TW');
+            history.forEach(record => {
+                const duration = parseDuration(record.executionDuration);
+                const durationStr = `${duration.toFixed(3)} 秒`;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${record.jobName}</td>
+                    <td>${record.jobGroup}</td>
+                    <td>${record.triggerName}</td>
+                    <td>${record.triggerGroup}</td>
+                    <td>${new Date(record.fireTime).toLocaleString()}</td>
+                    <td>${durationStr}</td>
+                    <td class="${record.wasSuccessful ? 'success' : 'failure'}">
+                        ${record.wasSuccessful ? '成功' : '失敗'}
+                    </td>
+                    <td>${record.exceptionMessage || '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
         }
 
-        function updateLastRefreshTime() {
-            const now = new Date();
-            document.getElementById('lastUpdate').textContent = 
-                `上次更新: ${now.toLocaleString('zh-TW')}`;
+        function updateChart(history) {
+            if (executionTimeChart) {
+                executionTimeChart.destroy();
+            }
+
+            const ctx = document.getElementById('executionTimeChart').getContext('2d');
+            
+            const labels = history.map(record => new Date(record.fireTime).toLocaleString());
+            const durations = history.map(record => parseDuration(record.executionDuration));
+            
+            executionTimeChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '執行時間 (秒)',
+                        data: durations,
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '執行時間 (秒)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: '執行時間'
+                            }
+                        }
+                    }
+                }
+            });
         }
 
-        function escapeHtml(unsafe) {
-            return unsafe
-                 .replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;")
-                 .replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
-         }
+        function parseDuration(duration) {
+            if (typeof duration === 'string') {
+                const parts = duration.split(':');
+                const seconds = parseFloat(parts[2] || '0');
+                const minutes = parseInt(parts[1] || '0');
+                const hours = parseInt(parts[0] || '0');
+                
+                return hours * 3600 + minutes * 60 + seconds;
+            }
+            
+            if (duration && typeof duration === 'object') {
+                return duration.totalSeconds || duration.totalMilliseconds / 1000 || 0;
+            }
+            
+            return 0;
+        }
+
+        async function clearHistory() {
+            const jobName = document.getElementById('jobName').value;
+            const jobGroup = document.getElementById('jobGroup').value;
+            
+            if (!confirm('確定要清除歷史記錄嗎？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/jobs/history?jobName=${encodeURIComponent(jobName)}&jobGroup=${encodeURIComponent(jobGroup)}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    loadHistory();
+                } else {
+                    throw new Error('清除歷史記錄失敗');
+                }
+            } catch (error) {
+                console.error('清除歷史記錄失敗:', error);
+                alert('清除歷史記錄失敗');
+            }
+        }
+
+        // 頁面載入時自動載入資料
+        document.addEventListener('DOMContentLoaded', () => {
+            loadJobs();
+            loadHistory();
+        });
+
+        // 切換頁簽時重新載入圖表
+        document.getElementById('history-tab').addEventListener('shown.bs.tab', () => {
+            if (executionTimeChart) {
+                executionTimeChart.resize();
+            }
+        });
     </script>
 </body>
 </html>
