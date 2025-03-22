@@ -1,10 +1,37 @@
 using NLog.Extensions.Logging;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Quartz;
 using Quartz.Sample;
 using Quartz.Sample.JobHistory;
 using Quartz.Sample.Jobs;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 加入 OpenTelemetry
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation() // 收集 ASP.NET Core 的 metrics
+        .AddHttpClientInstrumentation() // 收集 HTTP 客戶端的 metrics
+        .AddOtlpExporter(options =>
+        {
+            // options.Endpoint = new Uri("http://localhost:18889"); // 使用正確的 OTLP 端點
+            options.Endpoint = new Uri("http://localhost:4317"); // 使用正確的 OTLP 端點
+        }))
+    .WithTracing(tracing =>
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            // We want to view all traces in development
+            tracing.SetSampler(new AlwaysOnSampler());
+        }
+
+        tracing.AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+    });
+
+// 加入健康檢查
+builder.Services.AddHealthChecks();
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -29,7 +56,7 @@ builder.Services.AddQuartz(configurator =>
             .WithIdentity("UpdateOddsTodayJobTrigger")
             .WithCronSchedule("0/5 * * * * ?")
     );
-    
+
     var updateOddsEarlyJobKey = new JobKey("UpdateOddsEarlyJob");
     configurator.AddJob<UpdateOddsEarlyJob>(jobConfigurator => { jobConfigurator.WithIdentity(updateOddsEarlyJobKey); });
     configurator.AddTrigger(triggerConfigurator =>
@@ -58,7 +85,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 // 啟用靜態文件服務，提供 HTML 界面
 app.UseStaticFiles();
 
@@ -101,5 +127,6 @@ app.MapDelete("/api/jobs/history", (JobExecutionHistoryService historyService, s
 
 // 將根路徑重定向到儀表板頁面
 app.MapGet("/", () => Results.Redirect("/index.html"));
+app.MapHealthChecks("/health");
 
 app.Run();
